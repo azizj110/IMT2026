@@ -284,6 +284,7 @@ namespace QuantLib {
 
     template <class RNG, class S>
     inline MakeMCFixedLookbackEngine_2<RNG,S>::operator ext::shared_ptr<PricingEngine>() const {
+<<<<<<< HEAD
         QL_REQUIRE(steps_ != Null<Size>() || stepsPerYear_ != Null<Size>(),
                    "number of steps not given");
         QL_REQUIRE(steps_ == Null<Size>() || stepsPerYear_ == Null<Size>(),
@@ -305,3 +306,20 @@ namespace QuantLib {
 }
 #endif
 #endif
+=======
+        return ext::shared_ptr<PricingEngine>(new MCFixedLookbackEngine_2<RNG, S>(process_,
+                                                                                   steps_,
+                                                                                   stepsPerYear_,
+                                                                                   brownianBridge_,
+                                                                                   antithetic_,
+                                                                                   samples_,
+                                                                                   tolerance_,
+                                                                                   maxSamples_,
+                                                                                   seed_,
+                                                                                   constantParameters_));
+    }
+
+} // namespace QuantLib
+
+#endif // imt2026_mclookbackengine_hpp
+>>>>>>> Aziz
