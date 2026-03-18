@@ -24,6 +24,7 @@
 #ifndef mc_lookback_engines_hpp
 #define mc_lookback_engines_hpp
 
+#include "constantblackscholesprocess.hpp"
 #include <algorithm>
 #include <ql/exercise.hpp>
 #include <ql/instruments/lookbackoption.hpp>
@@ -31,7 +32,6 @@
 #include <ql/pricingengines/lookback/mclookbackengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include "constantblackscholesprocess.hpp"
 #include <utility>
 
 namespace QuantLib {
@@ -57,6 +57,7 @@ namespace QuantLib {
             } else {
                 payoff = std::max(strike_ - runningMin, 0.0);
             }
+
             return discount_ * payoff;
         }
 
@@ -68,13 +69,11 @@ namespace QuantLib {
 
     template <class RNG = PseudoRandom, class S = Statistics>
     class MCFixedLookbackEngine_2 : public ContinuousFixedLookbackOption::engine,
-                                    public McSimulation<SingleVariate,RNG,S> {
+                                    public McSimulation<SingleVariate, RNG, S> {
       public:
-        typedef typename McSimulation<SingleVariate,RNG,S>::path_generator_type
-            path_generator_type;
-        typedef typename McSimulation<SingleVariate,RNG,S>::path_pricer_type
-            path_pricer_type;
-        // constructor
+        typedef typename McSimulation<SingleVariate, RNG, S>::path_generator_type path_generator_type;
+        typedef typename McSimulation<SingleVariate, RNG, S>::path_pricer_type path_pricer_type;
+
         MCFixedLookbackEngine_2(ext::shared_ptr<GeneralizedBlackScholesProcess> process,
                                 Size timeSteps,
                                 Size timeStepsPerYear,
@@ -85,9 +84,10 @@ namespace QuantLib {
                                 Size maxSamples,
                                 BigNatural seed,
                                 bool constantParameters);
+
       protected:
-        // McSimulation implementation
         TimeGrid timeGrid() const override;
+
         ext::shared_ptr<path_generator_type> pathGenerator() const override {
             TimeGrid grid = timeGrid();
 
@@ -97,16 +97,18 @@ namespace QuantLib {
                     ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
                 QL_REQUIRE(payoff, "non-plain payoff given");
 
-                processForMc =
-                    makeMonteCarloProcess(process_, this->arguments_.exercise, payoff->strike(), true);
+                processForMc = makeMonteCarloProcess(
+                    process_, this->arguments_.exercise, payoff->strike(), true);
             }
 
             typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
             return ext::shared_ptr<path_generator_type>(
                 new path_generator_type(processForMc, grid, gen, brownianBridge_));
         }
+
         ext::shared_ptr<path_pricer_type> pathPricer() const override;
-        // data members
+
+      private:
         ext::shared_ptr<GeneralizedBlackScholesProcess> process_;
         Size timeSteps_, timeStepsPerYear_;
         Size requiredSamples_, maxSamples_;
@@ -129,34 +131,28 @@ namespace QuantLib {
         Size maxSamples,
         BigNatural seed,
         bool constantParameters)
-    : McSimulation<SingleVariate, RNG, S>(antitheticVariate, false), process_(std::move(process)),
-      timeSteps_(timeSteps), timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
-      maxSamples_(maxSamples), requiredTolerance_(requiredTolerance),
+    : McSimulation<SingleVariate, RNG, S>(antitheticVariate, false),
+      process_(std::move(process)), timeSteps_(timeSteps), timeStepsPerYear_(timeStepsPerYear),
+      requiredSamples_(requiredSamples), maxSamples_(maxSamples),
+      requiredTolerance_(requiredTolerance), antithetic_(antitheticVariate),
       brownianBridge_(brownianBridge), seed_(seed), constantParameters_(constantParameters) {
-        QL_REQUIRE(timeSteps != Null<Size>() ||
-                   timeStepsPerYear != Null<Size>(),
+        QL_REQUIRE(timeSteps != Null<Size>() || timeStepsPerYear != Null<Size>(),
                    "no time steps provided");
-        QL_REQUIRE(timeSteps == Null<Size>() ||
-                   timeStepsPerYear == Null<Size>(),
+        QL_REQUIRE(timeSteps == Null<Size>() || timeStepsPerYear == Null<Size>(),
                    "both time steps and time steps per year were provided");
-        QL_REQUIRE(timeSteps != 0,
-                   "timeSteps must be positive, " << timeSteps <<
-                   " not allowed");
+        QL_REQUIRE(timeSteps != 0, "timeSteps must be positive, " << timeSteps << " not allowed");
         QL_REQUIRE(timeStepsPerYear != 0,
-                   "timeStepsPerYear must be positive, " << timeStepsPerYear <<
-                   " not allowed");
+                   "timeStepsPerYear must be positive, " << timeStepsPerYear << " not allowed");
         this->registerWith(process_);
     }
 
-
     template <class RNG, class S>
-    inline TimeGrid MCFixedLookbackEngine_2<RNG,S>::timeGrid() const {
-
+    inline TimeGrid MCFixedLookbackEngine_2<RNG, S>::timeGrid() const {
         Time residualTime = process_->time(this->arguments_.exercise->lastDate());
         if (timeSteps_ != Null<Size>()) {
             return TimeGrid(residualTime, timeSteps_);
         } else if (timeStepsPerYear_ != Null<Size>()) {
-            Size steps = static_cast<Size>(timeStepsPerYear_*residualTime);
+            Size steps = static_cast<Size>(timeStepsPerYear_ * residualTime);
             return TimeGrid(residualTime, std::max<Size>(steps, 1));
         } else {
             QL_FAIL("time steps not specified");
@@ -164,8 +160,8 @@ namespace QuantLib {
     }
 
     template <class RNG, class S>
-    inline ext::shared_ptr<typename MCFixedLookbackEngine_2<RNG,S>::path_pricer_type>
-    MCFixedLookbackEngine_2<RNG,S>::pathPricer() const {
+    inline ext::shared_ptr<typename MCFixedLookbackEngine_2<RNG, S>::path_pricer_type>
+    MCFixedLookbackEngine_2<RNG, S>::pathPricer() const {
         TimeGrid grid = this->timeGrid();
         DiscountFactor discount = process_->riskFreeRate()->discount(grid.back());
 
@@ -173,19 +169,16 @@ namespace QuantLib {
             ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
 
-        return ext::make_shared<LookbackFixedPathPricer_2>(payoff->optionType(),
-                                                           payoff->strike(),
-                                                           discount);
+        return ext::make_shared<LookbackFixedPathPricer_2>(
+            payoff->optionType(), payoff->strike(), discount);
     }
-
-
 
     template <class RNG = PseudoRandom, class S = Statistics>
     class MakeMCFixedLookbackEngine_2 {
       public:
         explicit MakeMCFixedLookbackEngine_2(
             ext::shared_ptr<GeneralizedBlackScholesProcess> process);
-        // named parameters
+
         MakeMCFixedLookbackEngine_2& withSteps(Size steps);
         MakeMCFixedLookbackEngine_2& withStepsPerYear(Size steps);
         MakeMCFixedLookbackEngine_2& withBrownianBridge(bool b = true);
@@ -195,8 +188,9 @@ namespace QuantLib {
         MakeMCFixedLookbackEngine_2& withMaxSamples(Size samples);
         MakeMCFixedLookbackEngine_2& withSeed(BigNatural seed);
         MakeMCFixedLookbackEngine_2& withConstantParameters(bool b = true);
-        // conversion to pricing engine
+
         operator ext::shared_ptr<PricingEngine>() const;
+
       private:
         ext::shared_ptr<GeneralizedBlackScholesProcess> process_;
         bool brownianBridge_ = false, antithetic_ = false;
@@ -213,77 +207,79 @@ namespace QuantLib {
       samples_(Null<Size>()), maxSamples_(Null<Size>()), tolerance_(Null<Real>()) {}
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withSteps(Size steps) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withSteps(Size steps) {
         steps_ = steps;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withStepsPerYear(Size steps) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withStepsPerYear(Size steps) {
         stepsPerYear_ = steps;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withBrownianBridge(bool brownianBridge) {
-        brownianBridge_ = brownianBridge;
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withBrownianBridge(bool b) {
+        brownianBridge_ = b;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withAntitheticVariate(bool b) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withAntitheticVariate(bool b) {
         antithetic_ = b;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withSamples(Size samples) {
-        QL_REQUIRE(tolerance_ == Null<Real>(),
-                   "tolerance already set");
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withSamples(Size samples) {
+        QL_REQUIRE(tolerance_ == Null<Real>(), "tolerance already set");
         samples_ = samples;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withAbsoluteTolerance(Real tolerance) {
-        QL_REQUIRE(samples_ == Null<Size>(),
-                   "number of samples already set");
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withAbsoluteTolerance(Real tolerance) {
+        QL_REQUIRE(samples_ == Null<Size>(), "number of samples already set");
         QL_REQUIRE(RNG::allowsErrorEstimate,
-                   "chosen random generator policy "
-                   "does not allow an error estimate");
+                   "chosen random generator policy does not allow an error estimate");
         tolerance_ = tolerance;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withMaxSamples(Size samples) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withMaxSamples(Size samples) {
         maxSamples_ = samples;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withSeed(BigNatural seed) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withSeed(BigNatural seed) {
         seed_ = seed;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>&
-    MakeMCFixedLookbackEngine_2<RNG,S>::withConstantParameters(bool b) {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>&
+    MakeMCFixedLookbackEngine_2<RNG, S>::withConstantParameters(bool b) {
         constantParameters_ = b;
         return *this;
     }
 
     template <class RNG, class S>
-    inline MakeMCFixedLookbackEngine_2<RNG,S>::operator ext::shared_ptr<PricingEngine>() const {
+    inline MakeMCFixedLookbackEngine_2<RNG, S>::operator ext::shared_ptr<PricingEngine>() const {
+        QL_REQUIRE(steps_ != Null<Size>() || stepsPerYear_ != Null<Size>(),
+                   "number of steps not given");
+        QL_REQUIRE(steps_ == Null<Size>() || stepsPerYear_ == Null<Size>(),
+                   "number of steps overspecified");
+
         return ext::shared_ptr<PricingEngine>(new MCFixedLookbackEngine_2<RNG, S>(process_,
                                                                                    steps_,
                                                                                    stepsPerYear_,
@@ -298,4 +294,4 @@ namespace QuantLib {
 
 } // namespace QuantLib
 
-#endif // imt2026_mclookbackengine_hpp
+#endif // mc_lookback_engines_hpp
