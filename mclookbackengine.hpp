@@ -180,10 +180,11 @@ namespace QuantLib {
 
 
 
-    template <class RNG, class S>
+    template <class RNG = PseudoRandom, class S = Statistics>
     class MakeMCFixedLookbackEngine_2 {
       public:
-        explicit MakeMCFixedLookbackEngine_2(ext::shared_ptr<GeneralizedBlackScholesProcess>);
+        explicit MakeMCFixedLookbackEngine_2(
+            ext::shared_ptr<GeneralizedBlackScholesProcess> process);
         // named parameters
         MakeMCFixedLookbackEngine_2& withSteps(Size steps);
         MakeMCFixedLookbackEngine_2& withStepsPerYear(Size steps);
@@ -292,15 +293,15 @@ namespace QuantLib {
             new MCFixedLookbackEngine_2<RNG,S>(process_,
                                                steps_,
                                                stepsPerYear_,
-                                               brownianBridge_,
-                                               antithetic_,
-                                               samples_,
+                                               antithetic_,ge_,
+                                               samples_,c_,
                                                tolerance_,
                                                maxSamples_,
-                                               seed_,
+                                               seed_,ples_,
                                                constantParameters_));
+    }                                          constantParameters_));
     }
-
 }
-
+}
+#endif
 #endif
