@@ -28,12 +28,11 @@
 #include <ql/pricingengines/asian/mc_discr_arith_av_strike.hpp>
 #include <ql/pricingengines/asian/mcdiscreteasianenginebase.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include "constantblackscholesprocess.hpp"
 #include <utility>
 
 namespace QuantLib {
 
-    //!  Monte Carlo pricing engine for discrete arithmetic average-strike Asian
-    /*!  \ingroup asianengines */
     template <class RNG = PseudoRandom, class S = Statistics>
     class MCDiscreteArithmeticASEngine_2
     : public MCDiscreteAveragingAsianEngineBase<SingleVariate, RNG, S> {
@@ -53,12 +52,16 @@ namespace QuantLib {
             Size requiredSamples,
             Real requiredTolerance,
             Size maxSamples,
-            BigNatural seed);
+            BigNatural seed,
+            bool constantParameters);
 
       protected:
+        ext::shared_ptr<path_generator_type> pathGenerator() const override;
         ext::shared_ptr<path_pricer_type> pathPricer() const override;
-    };
 
+      private:
+        bool constantParameters_;
+    };
 
     // inline definitions
 
@@ -70,7 +73,8 @@ namespace QuantLib {
         Size requiredSamples,
         Real requiredTolerance,
         Size maxSamples,
-        BigNatural seed)
+        BigNatural seed,
+        bool constantParameters)
     : MCDiscreteAveragingAsianEngineBase<SingleVariate, RNG, S>(process,
                                                                 brownianBridge,
                                                                 antitheticVariate,
@@ -78,7 +82,30 @@ namespace QuantLib {
                                                                 requiredSamples,
                                                                 requiredTolerance,
                                                                 maxSamples,
-                                                                seed) {}
+                                                                seed),
+      constantParameters_(constantParameters) {}
+
+    template <class RNG, class S>
+    inline ext::shared_ptr<typename MCDiscreteArithmeticASEngine_2<RNG, S>::path_generator_type>
+    MCDiscreteArithmeticASEngine_2<RNG, S>::pathGenerator() const {
+        const TimeGrid grid = this->timeGrid();
+
+        ext::shared_ptr<PlainVanillaPayoff> payoff =
+            ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
+        QL_REQUIRE(payoff, "non-plain payoff given");
+
+        ext::shared_ptr<GeneralizedBlackScholesProcess> process =
+            ext::dynamic_pointer_cast<GeneralizedBlackScholesProcess>(this->process_);
+        QL_REQUIRE(process, "Black-Scholes process required");
+
+        const ext::shared_ptr<StochasticProcess1D> processForMc =
+            makeMonteCarloProcess(process, this->arguments_.exercise, payoff->strike(), constantParameters_);
+
+        typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, this->seed_);
+
+        return ext::make_shared<path_generator_type>(processForMc, grid, gen, this->brownianBridge_);
+    }
+
 
     template <class RNG, class S>
     inline ext::shared_ptr<typename MCDiscreteArithmeticASEngine_2<RNG, S>::path_pricer_type>
@@ -127,6 +154,7 @@ namespace QuantLib {
         Real tolerance_;
         bool brownianBridge_ = true;
         BigNatural seed_ = 0;
+        bool constantParameters_ = false;
     };
 
     template <class RNG, class S>
@@ -185,6 +213,7 @@ namespace QuantLib {
     template <class RNG, class S>
     inline MakeMCDiscreteArithmeticASEngine_2<RNG, S>&
     MakeMCDiscreteArithmeticASEngine_2<RNG, S>::withConstantParameters(bool b) {
+        constantParameters_ = b;
         return *this;
     }
 
@@ -192,7 +221,14 @@ namespace QuantLib {
     inline MakeMCDiscreteArithmeticASEngine_2<RNG, S>::operator ext::shared_ptr<PricingEngine>()
         const {
         return ext::shared_ptr<PricingEngine>(new MCDiscreteArithmeticASEngine_2<RNG, S>(
-            process_, brownianBridge_, antithetic_, samples_, tolerance_, maxSamples_, seed_));
+            process_,
+            brownianBridge_,
+            antithetic_,
+            samples_,
+            tolerance_,
+            maxSamples_,
+            seed_,
+            constantParameters_));
     }
 
 }
