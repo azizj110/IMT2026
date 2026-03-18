@@ -149,6 +149,19 @@ namespace QuantLib {
     }
 
     template <class RNG, class S>
+    inline void MCFixedLookbackEngine_2<RNG, S>::calculate() const {
+        McSimulation<SingleVariate, RNG, S>::calculate(
+            requiredTolerance_, requiredSamples_, maxSamples_);
+
+        this->results_.value = this->mcModel_->sampleAccumulator().mean();
+
+        if (RNG::allowsErrorEstimate) {
+            this->results_.errorEstimate =
+                this->mcModel_->sampleAccumulator().errorEstimate();
+        }
+    }
+
+    template <class RNG, class S>
     inline TimeGrid MCFixedLookbackEngine_2<RNG, S>::timeGrid() const {
         Time residualTime = process_->time(this->arguments_.exercise->lastDate());
         if (timeSteps_ != Null<Size>()) {
