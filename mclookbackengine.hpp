@@ -85,6 +85,8 @@ namespace QuantLib {
                                 BigNatural seed,
                                 bool constantParameters);
 
+        void calculate() const override;
+
       protected:
         TimeGrid timeGrid() const override;
 
