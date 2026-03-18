@@ -120,8 +120,15 @@ namespace QuantLib {
             ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
 
+        ext::shared_ptr<GeneralizedBlackScholesProcess> process =
+            ext::dynamic_pointer_cast<GeneralizedBlackScholesProcess>(this->process_);
+        QL_REQUIRE(process, "Black-Scholes process required");
+
         const ext::shared_ptr<StochasticProcess1D> processForMc =
-            makeMonteCarloProcess(this->process_, this->arguments_.exercise, payoff->strike(), constantParameters_);
+            makeMonteCarloProcess(process,
+                                  this->arguments_.exercise,
+                                  payoff->strike(),
+                                  constantParameters_);
 
         typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, this->seed_);
 

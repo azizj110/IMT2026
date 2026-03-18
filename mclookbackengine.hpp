@@ -24,15 +24,47 @@
 #ifndef mc_lookback_engines_hpp
 #define mc_lookback_engines_hpp
 
+#include <algorithm>
 #include <ql/exercise.hpp>
 #include <ql/instruments/lookbackoption.hpp>
+#include <ql/instruments/payoffs.hpp>
+#include <ql/pricingengines/lookback/mclookbackengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include "constantblackscholesprocess.hpp"
 #include <utility>
-#include <ql/pricingengines/lookback/mclookbackengine.hpp>
 
 namespace QuantLib {
+
+    class LookbackFixedPathPricer_2 : public PathPricer<Path> {
+      public:
+        LookbackFixedPathPricer_2(Option::Type type, Real strike, DiscountFactor discount)
+        : type_(type), strike_(strike), discount_(discount) {}
+
+        Real operator()(const Path& path) const override {
+            QL_REQUIRE(path.length() > 0, "empty path");
+
+            Real runningMin = path.front();
+            Real runningMax = path.front();
+            for (Size i = 1; i < path.length(); ++i) {
+                runningMin = std::min(runningMin, path[i]);
+                runningMax = std::max(runningMax, path[i]);
+            }
+
+            Real payoff = 0.0;
+            if (type_ == Option::Call) {
+                payoff = std::max(runningMax - strike_, 0.0);
+            } else {
+                payoff = std::max(strike_ - runningMin, 0.0);
+            }
+            return discount_ * payoff;
+        }
+
+      private:
+        Option::Type type_;
+        Real strike_;
+        DiscountFactor discount_;
+    };
 
     template <class RNG = PseudoRandom, class S = Statistics>
     class MCFixedLookbackEngine_2 : public ContinuousFixedLookbackOption::engine,
@@ -141,9 +173,9 @@ namespace QuantLib {
             ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
 
-        return ext::make_shared<LookbackFixedPathPricer>(payoff->optionType(),
-                                                         payoff->strike(),
-                                                         discount);
+        return ext::make_shared<LookbackFixedPathPricer_2>(payoff->optionType(),
+                                                           payoff->strike(),
+                                                           discount);
     }
 
 
