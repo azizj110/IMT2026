@@ -36,6 +36,38 @@
 
 namespace QuantLib {
 
+    class LookbackFixedPathPricer_2 : public PathPricer<Path> {
+      public:
+        LookbackFixedPathPricer_2(Option::Type type,
+                                  Real strike,
+                                  DiscountFactor discount)
+        : payoff_(type, strike), discount_(discount) {
+            QL_REQUIRE(strike >= 0.0, "strike less than zero not allowed");
+        }
+
+        Real operator()(const Path& path) const override {
+            QL_REQUIRE(!path.empty(), "the path cannot be empty");
+
+            Real underlying;
+            switch (payoff_.optionType()) {
+              case Option::Put:
+                underlying = *std::min_element(path.begin() + 1, path.end());
+                break;
+              case Option::Call:
+                underlying = *std::max_element(path.begin() + 1, path.end());
+                break;
+              default:
+                QL_FAIL("unknown option type");
+            }
+
+            return payoff_(underlying) * discount_;
+        }
+
+      private:
+        PlainVanillaPayoff payoff_;
+        DiscountFactor discount_;
+    };
+
     template <class RNG = PseudoRandom, class S = Statistics>
     class MCFixedLookbackEngine_2 : public ContinuousFixedLookbackOption::engine,
                                     public McSimulation<SingleVariate, RNG, S> {
@@ -153,12 +185,8 @@ namespace QuantLib {
             ext::dynamic_pointer_cast<PlainVanillaPayoff>(this->arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
 
-        // Match QuantLib implementation instead of custom pricer
-        return ext::make_shared<LookbackFixedPathPricer>(
-            payoff->optionType(),
-            payoff->strike(),
-            discount,
-            this->arguments_.minmax);
+        return ext::make_shared<LookbackFixedPathPricer_2>(
+            payoff->optionType(), payoff->strike(), discount);
     }
 
     template <class RNG = PseudoRandom, class S = Statistics>
