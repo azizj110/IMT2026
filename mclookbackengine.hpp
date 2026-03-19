@@ -25,13 +25,13 @@
 #define mc_lookback_engines_hpp
 
 #include "constantblackscholesprocess.hpp"
-#include <algorithm>
 #include <ql/exercise.hpp>
 #include <ql/instruments/lookbackoption.hpp>
 #include <ql/instruments/payoffs.hpp>
 #include <ql/pricingengines/lookback/mclookbackengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <algorithm>
 #include <utility>
 
 namespace QuantLib {
@@ -42,24 +42,22 @@ namespace QuantLib {
         : type_(type), strike_(strike), discount_(discount) {}
 
         Real operator()(const Path& path) const override {
-            QL_REQUIRE(path.length() > 0, "empty path");
+            QL_REQUIRE(!path.empty(), "empty path");
 
-            Real runningMin = path.front();
-            Real runningMax = path.front();
-            for (Size i = 1; i < path.length(); ++i) {
-                runningMin = std::min(runningMin, path[i]);
-                runningMax = std::max(runningMax, path[i]);
-            }
-
-            Real payoff = 0.0;
+            // Start from path[1] to exclude the initial spot (t=0),
+            // matching QuantLib's LookbackFixedPathPricer
+            Real underlying;
             if (type_ == Option::Call) {
-                payoff = std::max(runningMax - strike_, 0.0);
+                underlying = *std::max_element(path.begin() + 1, path.end());
             } else {
-                payoff = std::max(strike_ - runningMin, 0.0);
+                underlying = *std::min_element(path.begin() + 1, path.end());
             }
 
-            return discount_ * payoff;
+            return discount_ *
+                   std::max(type_ == Option::Call ? underlying - strike_ : strike_ - underlying,
+                            0.0);
         }
+
 
       private:
         Option::Type type_;
@@ -71,7 +69,8 @@ namespace QuantLib {
     class MCFixedLookbackEngine_2 : public ContinuousFixedLookbackOption::engine,
                                     public McSimulation<SingleVariate, RNG, S> {
       public:
-        typedef typename McSimulation<SingleVariate, RNG, S>::path_generator_type path_generator_type;
+        typedef
+            typename McSimulation<SingleVariate, RNG, S>::path_generator_type path_generator_type;
         typedef typename McSimulation<SingleVariate, RNG, S>::path_pricer_type path_pricer_type;
 
         MCFixedLookbackEngine_2(ext::shared_ptr<GeneralizedBlackScholesProcess> process,
@@ -133,11 +132,11 @@ namespace QuantLib {
         Size maxSamples,
         BigNatural seed,
         bool constantParameters)
-    : McSimulation<SingleVariate, RNG, S>(antitheticVariate, false),
-      process_(std::move(process)), timeSteps_(timeSteps), timeStepsPerYear_(timeStepsPerYear),
-      requiredSamples_(requiredSamples), maxSamples_(maxSamples),
-      requiredTolerance_(requiredTolerance), antithetic_(antitheticVariate),
-      brownianBridge_(brownianBridge), seed_(seed), constantParameters_(constantParameters) {
+    : McSimulation<SingleVariate, RNG, S>(antitheticVariate, false), process_(std::move(process)),
+      timeSteps_(timeSteps), timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
+      maxSamples_(maxSamples), requiredTolerance_(requiredTolerance),
+      antithetic_(antitheticVariate), brownianBridge_(brownianBridge), seed_(seed),
+      constantParameters_(constantParameters) {
         QL_REQUIRE(timeSteps != Null<Size>() || timeStepsPerYear != Null<Size>(),
                    "no time steps provided");
         QL_REQUIRE(timeSteps == Null<Size>() || timeStepsPerYear == Null<Size>(),
@@ -156,8 +155,7 @@ namespace QuantLib {
         this->results_.value = this->mcModel_->sampleAccumulator().mean();
 
         if (RNG::allowsErrorEstimate) {
-            this->results_.errorEstimate =
-                this->mcModel_->sampleAccumulator().errorEstimate();
+            this->results_.errorEstimate = this->mcModel_->sampleAccumulator().errorEstimate();
         }
     }
 
@@ -295,16 +293,17 @@ namespace QuantLib {
         QL_REQUIRE(steps_ == Null<Size>() || stepsPerYear_ == Null<Size>(),
                    "number of steps overspecified");
 
-        return ext::shared_ptr<PricingEngine>(new MCFixedLookbackEngine_2<RNG, S>(process_,
-                                                                                   steps_,
-                                                                                   stepsPerYear_,
-                                                                                   brownianBridge_,
-                                                                                   antithetic_,
-                                                                                   samples_,
-                                                                                   tolerance_,
-                                                                                   maxSamples_,
-                                                                                   seed_,
-                                                                                   constantParameters_));
+        return ext::shared_ptr<PricingEngine>(
+            new MCFixedLookbackEngine_2<RNG, S>(process_,
+                                                steps_,
+                                                stepsPerYear_,
+                                                brownianBridge_,
+                                                antithetic_,
+                                                samples_,
+                                                tolerance_,
+                                                maxSamples_,
+                                                seed_,
+                                                constantParameters_));
     }
 
 } // namespace QuantLib
